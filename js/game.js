@@ -77,7 +77,7 @@ export default class Game {
         this.lastTime = timestamp;
 
         this.update(deltaTime);
-        this.draw(timestamp); // Passamos o timestamp para o efeito de pulsação
+        this.draw(timestamp);
 
         requestAnimationFrame((t) => this.loop(t));
     }
@@ -107,11 +107,8 @@ export default class Game {
     }
 
     draw(timestamp) {
-        this.ctx.fillStyle = '#1a1a1a';
+        this.ctx.fillStyle = '#111'; // Fundo mais profundo para destacar brasas
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-        // Cálculo da pulsação da brasa (valor entre 0 e 1)
-        const pulse = (Math.sin(timestamp / 500) + 1) / 2;
 
         const startCol = Math.floor(this.camera.x / this.tileSize);
         const endCol = startCol + (this.canvas.width / this.tileSize) + 1;
@@ -125,33 +122,42 @@ export default class Game {
             for (let r = startRow; r <= endRow; r++) {
                 const x = (c - startCol) * this.tileSize + offsetX;
                 const y = (r - startRow) * this.tileSize + offsetY;
+                
+                // Dados únicos por tile usando a seed
                 const tileData = this.getTileData(c, r);
 
                 if (tileData.biome === 'safe') {
-                    // Verde Orgânico
-                    this.ctx.fillStyle = '#2d8544'; 
+                    // Solo Verde com variação sutil de tom
+                    this.ctx.fillStyle = tileData.detailVar > 0.7 ? '#2a7a3f' : '#2d8544';
                     this.ctx.fillRect(x, y, this.tileSize, this.tileSize);
                     
-                    // Detalhes de grama sutis
-                    if (tileData.detailVar > 0.6) {
+                    // Detalhes de Grama (Posição Aleatória dentro do tile)
+                    if (tileData.detailVar > 0.4) {
+                        const grassX = x + (tileData.offsetX * 40) + 10;
+                        const grassY = y + (tileData.offsetY * 40) + 10;
+                        
                         this.ctx.strokeStyle = '#3eb05d';
-                        this.ctx.lineWidth = 1;
+                        this.ctx.lineWidth = 1.5;
                         this.ctx.beginPath();
-                        this.ctx.moveTo(x + 20, y + 40);
-                        this.ctx.lineTo(x + 22, y + 35);
+                        this.ctx.moveTo(grassX, grassY);
+                        this.ctx.lineTo(grassX + 2, grassY - 5);
+                        this.ctx.moveTo(grassX + 3, grassY);
+                        this.ctx.lineTo(grassX + 5, grassY - 4);
                         this.ctx.stroke();
                     }
                 } else {
-                    // Cinza de Fuligem Orgânico
-                    const grayBase = 35 + (tileData.detailVar * 15);
+                    // Solo Queimado com manchas de cinza e fuligem
+                    const grayBase = 25 + (tileData.detailVar * 20);
                     this.ctx.fillStyle = `rgb(${grayBase}, ${grayBase}, ${grayBase})`;
                     this.ctx.fillRect(x, y, this.tileSize, this.tileSize);
                     
-                    // Manchas de cinza escura
-                    if (tileData.detailVar < 0.3) {
-                        this.ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                    // Manchas de fuligem orgânicas
+                    if (tileData.detailVar < 0.4) {
+                        const sootX = x + (tileData.offsetX * 30) + 15;
+                        const sootY = y + (tileData.offsetY * 30) + 15;
+                        this.ctx.fillStyle = 'rgba(0,0,0,0.3)';
                         this.ctx.beginPath();
-                        this.ctx.arc(x + 32, y + 32, 15, 0, Math.PI * 2);
+                        this.ctx.arc(sootX, sootY, 8 + (tileData.detailVar * 10), 0, Math.PI * 2);
                         this.ctx.fill();
                     }
                 }
@@ -159,20 +165,26 @@ export default class Game {
                 // Objetos
                 if (tileData.object === 'flower') {
                     if (this.assets['flower']) {
-                        this.ctx.drawImage(this.assets['flower'], x + 8, y + 8, 48, 48);
+                        const fX = x + 8 + (tileData.offsetX * 8);
+                        const fY = y + 8 + (tileData.offsetY * 8);
+                        this.ctx.drawImage(this.assets['flower'], fX, fY, 48, 48);
                     }
                 } 
                 else if (tileData.object === 'ember') {
-                    // Brasa pulsante
-                    const glowSize = 5 + (pulse * 10);
-                    const alpha = 0.3 + (pulse * 0.7);
+                    // Brasa pulsante independente baseada na seed e tempo
+                    const individualPulse = (Math.sin((timestamp / 400) + (tileData.detailVar * 10)) + 1) / 2;
+                    const glowSize = 3 + (individualPulse * 12);
+                    const alpha = 0.4 + (individualPulse * 0.6);
                     
-                    this.ctx.shadowColor = `rgba(255, 69, 0, ${alpha})`;
+                    const emberX = x + 12 + (tileData.offsetX * 40);
+                    const emberY = y + 12 + (tileData.offsetY * 40);
+
+                    this.ctx.shadowColor = `rgba(255, 50, 0, ${alpha})`;
                     this.ctx.shadowBlur = glowSize;
-                    this.ctx.fillStyle = `rgba(255, ${100 + (pulse * 100)}, 0, ${alpha})`;
+                    this.ctx.fillStyle = `rgba(255, ${80 + (individualPulse * 120)}, 20, ${alpha})`;
                     
                     this.ctx.beginPath();
-                    this.ctx.arc(x + 32, y + 32, 3 + (pulse * 2), 0, Math.PI * 2);
+                    this.ctx.arc(emberX, emberY, 2 + (individualPulse * 2), 0, Math.PI * 2);
                     this.ctx.fill();
                     this.ctx.shadowBlur = 0;
                 }
@@ -208,23 +220,25 @@ export default class Game {
     getTileData(col, row) {
         const localSeed = `${this.seed}_${col}_${row}`;
         const rng = createSeededRandom(localSeed);
-        const val1 = rng();
-        const val2 = rng();
+        const val1 = rng(); // Variação de Bioma
+        const val2 = rng(); // Escolha de Objeto
+        const offsetX = rng(); // Posição X aleatória dentro do tile
+        const offsetY = rng(); // Posição Y aleatória dentro do tile
 
-        // Cálculo de distância com ruído para borda orgânica
         const dist = Math.sqrt(col*col + row*row);
-        const noise = (val1 * 2.5); // Aumentamos o ruído para ser mais irregular
-        const safeZoneRadius = 3.5;
+        const noise = (val1 * 2.8); 
+        const safeZoneRadius = 3.2;
 
         let biome = (dist < safeZoneRadius + noise) ? 'safe' : 'burned';
 
         let object = null;
         if (biome === 'safe') {
-            if (val2 > 0.92) object = 'flower'; // Menos flores para parecer natural
+            if (val2 > 0.94) object = 'flower'; 
         } else {
-            if (val2 > 0.98) object = 'ember'; // Menos brasas, mas pulsantes
+            // Brasas raras para parecerem carvões quentes naturais
+            if (val2 > 0.985) object = 'ember'; 
         }
 
-        return { biome, object, detailVar: val1 };
+        return { biome, object, detailVar: val1, offsetX, offsetY };
     }
 }
