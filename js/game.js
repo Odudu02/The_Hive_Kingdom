@@ -18,6 +18,10 @@ export default class Game {
         this.rng = null;
         this.isRunning = false;
         
+        // Sistema de Partículas
+        this.particles = [];
+        this.maxParticles = 100; // Quantidade equilibrada para naturalidade
+        
         this.onPlayerMove = null; 
         this.lastTime = 0;
 
@@ -57,6 +61,11 @@ export default class Game {
         this.localPlayer.nickname = nickname;
         this.rng = createSeededRandom(this.seed);
         
+        // Inicializa o Pool de Partículas (Invisíveis no início)
+        for (let i = 0; i < this.maxParticles; i++) {
+            this.particles.push({ x: 0, y: 0, vx: 0, vy: 0, life: 0, size: 0, type: 'smoke' });
+        }
+
         this.isRunning = true;
         this.lastTime = performance.now();
         requestAnimationFrame((t) => this.loop(t));
@@ -76,13 +85,13 @@ export default class Game {
         const deltaTime = (timestamp - this.lastTime) / 1000;
         this.lastTime = timestamp;
 
-        this.update(deltaTime);
+        this.update(deltaTime, timestamp);
         this.draw(timestamp);
 
         requestAnimationFrame((t) => this.loop(t));
     }
 
-    update(deltaTime) {
+    update(deltaTime, timestamp) {
         const input = this.input.getState();
 
         if (input.isMoving) {
@@ -104,10 +113,49 @@ export default class Game {
         const targetCamY = this.localPlayer.y - this.canvas.height / 2;
         this.camera.x += (targetCamX - this.camera.x) * 0.1;
         this.camera.y += (targetCamY - this.camera.y) * 0.1;
+
+        // Atualiza Partículas
+        this.updateParticles(deltaTime, timestamp);
+    }
+
+    updateParticles(dt, time) {
+        this.particles.forEach(p => {
+            if (p.life > 0) {
+                p.life -= dt;
+                p.y += p.vy * dt;
+                // Efeito de balanço suave (Vento)
+                p.x += Math.sin(time / 500 + p.size) * 0.5;
+                if (p.type === 'smoke') p.size += dt * 5;
+            } else {
+                // Respawn da partícula em um tile queimado visível
+                this.respawnParticle(p);
+            }
+        });
+    }
+
+    respawnParticle(p) {
+        // Tenta encontrar um ponto aleatório na tela
+        const randX = this.camera.x + Math.random() * this.canvas.width;
+        const randY = this.camera.y + Math.random() * this.canvas.height;
+        
+        const col = Math.floor(randX / this.tileSize);
+        const row = Math.floor(randY / this.tileSize);
+        const tile = this.getTileData(col, row);
+
+        if (tile.biome === 'burned') {
+            p.x = randX;
+            p.y = randY;
+            p.life = 1 + Math.random() * 2;
+            p.type = Math.random() > 0.7 ? 'soot' : 'smoke';
+            p.vy = -20 - Math.random() * 30; // Sobe
+            p.size = p.type === 'smoke' ? 2 : 1;
+        } else {
+            p.life = 0; // Tenta novamente no próximo frame
+        }
     }
 
     draw(timestamp) {
-        this.ctx.fillStyle = '#111'; // Fundo mais profundo para destacar brasas
+        this.ctx.fillStyle = '#111'; 
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
         const startCol = Math.floor(this.camera.x / this.tileSize);
@@ -118,81 +166,52 @@ export default class Game {
         const offsetX = -this.camera.x + startCol * this.tileSize;
         const offsetY = -this.camera.y + startRow * this.tileSize;
 
+        // 1. Desenha Solo e Objetos
         for (let c = startCol; c <= endCol; c++) {
             for (let r = startRow; r <= endRow; r++) {
                 const x = (c - startCol) * this.tileSize + offsetX;
                 const y = (r - startRow) * this.tileSize + offsetY;
-                
-                // Dados únicos por tile usando a seed
                 const tileData = this.getTileData(c, r);
 
                 if (tileData.biome === 'safe') {
-                    // Solo Verde com variação sutil de tom
                     this.ctx.fillStyle = tileData.detailVar > 0.7 ? '#2a7a3f' : '#2d8544';
                     this.ctx.fillRect(x, y, this.tileSize, this.tileSize);
-                    
-                    // Detalhes de Grama (Posição Aleatória dentro do tile)
-                    if (tileData.detailVar > 0.4) {
-                        const grassX = x + (tileData.offsetX * 40) + 10;
-                        const grassY = y + (tileData.offsetY * 40) + 10;
-                        
-                        this.ctx.strokeStyle = '#3eb05d';
-                        this.ctx.lineWidth = 1.5;
-                        this.ctx.beginPath();
-                        this.ctx.moveTo(grassX, grassY);
-                        this.ctx.lineTo(grassX + 2, grassY - 5);
-                        this.ctx.moveTo(grassX + 3, grassY);
-                        this.ctx.lineTo(grassX + 5, grassY - 4);
-                        this.ctx.stroke();
-                    }
                 } else {
-                    // Solo Queimado com manchas de cinza e fuligem
                     const grayBase = 25 + (tileData.detailVar * 20);
                     this.ctx.fillStyle = `rgb(${grayBase}, ${grayBase}, ${grayBase})`;
                     this.ctx.fillRect(x, y, this.tileSize, this.tileSize);
-                    
-                    // Manchas de fuligem orgânicas
-                    if (tileData.detailVar < 0.4) {
-                        const sootX = x + (tileData.offsetX * 30) + 15;
-                        const sootY = y + (tileData.offsetY * 30) + 15;
-                        this.ctx.fillStyle = 'rgba(0,0,0,0.3)';
-                        this.ctx.beginPath();
-                        this.ctx.arc(sootX, sootY, 8 + (tileData.detailVar * 10), 0, Math.PI * 2);
-                        this.ctx.fill();
-                    }
                 }
 
-                // Objetos
-                if (tileData.object === 'flower') {
-                    if (this.assets['flower']) {
-                        const fX = x + 8 + (tileData.offsetX * 8);
-                        const fY = y + 8 + (tileData.offsetY * 8);
-                        this.ctx.drawImage(this.assets['flower'], fX, fY, 48, 48);
-                    }
-                } 
-                else if (tileData.object === 'ember') {
-                    // Brasa pulsante independente baseada na seed e tempo
+                if (tileData.object === 'flower' && this.assets['flower']) {
+                    this.ctx.drawImage(this.assets['flower'], x+8, y+8, 48, 48);
+                } else if (tileData.object === 'ember') {
                     const individualPulse = (Math.sin((timestamp / 400) + (tileData.detailVar * 10)) + 1) / 2;
-                    const glowSize = 3 + (individualPulse * 12);
-                    const alpha = 0.4 + (individualPulse * 0.6);
-                    
-                    const emberX = x + 12 + (tileData.offsetX * 40);
-                    const emberY = y + 12 + (tileData.offsetY * 40);
-
-                    this.ctx.shadowColor = `rgba(255, 50, 0, ${alpha})`;
-                    this.ctx.shadowBlur = glowSize;
-                    this.ctx.fillStyle = `rgba(255, ${80 + (individualPulse * 120)}, 20, ${alpha})`;
-                    
+                    this.ctx.fillStyle = `rgba(255, ${80 + (individualPulse * 120)}, 20, ${0.4 + individualPulse * 0.6})`;
                     this.ctx.beginPath();
-                    this.ctx.arc(emberX, emberY, 2 + (individualPulse * 2), 0, Math.PI * 2);
+                    this.ctx.arc(x + 12 + (tileData.offsetX * 40), y + 12 + (tileData.offsetY * 40), 2 + (individualPulse * 2), 0, Math.PI * 2);
                     this.ctx.fill();
-                    this.ctx.shadowBlur = 0;
                 }
             }
         }
 
+        // 2. Desenha Partículas (Fumaça e Fuligem)
+        this.drawParticles();
+
+        // 3. Desenha Players
         this.remotePlayers.forEach(p => this.drawPlayer(p, 'yellow'));
         this.drawPlayer(this.localPlayer, 'white');
+    }
+
+    drawParticles() {
+        this.particles.forEach(p => {
+            if (p.life > 0) {
+                const alpha = Math.min(p.life, 0.5); // Transparência suave
+                this.ctx.fillStyle = p.type === 'smoke' ? `rgba(150, 150, 150, ${alpha * 0.4})` : `rgba(0, 0, 0, ${alpha})`;
+                this.ctx.beginPath();
+                this.ctx.arc(p.x - this.camera.x, p.y - this.camera.y, p.size, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
+        });
     }
 
     drawPlayer(player, color) {
@@ -211,34 +230,26 @@ export default class Game {
         this.ctx.fillStyle = 'white';
         this.ctx.font = 'bold 14px Segoe UI';
         this.ctx.textAlign = 'center';
-        this.ctx.shadowColor = 'black';
-        this.ctx.shadowBlur = 4;
         this.ctx.fillText(player.nickname || '?', screenX + 32, screenY - 10);
-        this.ctx.shadowBlur = 0;
     }
 
     getTileData(col, row) {
         const localSeed = `${this.seed}_${col}_${row}`;
         const rng = createSeededRandom(localSeed);
-        const val1 = rng(); // Variação de Bioma
-        const val2 = rng(); // Escolha de Objeto
-        const offsetX = rng(); // Posição X aleatória dentro do tile
-        const offsetY = rng(); // Posição Y aleatória dentro do tile
-
+        const val1 = rng(); 
+        const val2 = rng();
+        const offsetX = rng();
+        const offsetY = rng();
         const dist = Math.sqrt(col*col + row*row);
         const noise = (val1 * 2.8); 
         const safeZoneRadius = 3.2;
-
         let biome = (dist < safeZoneRadius + noise) ? 'safe' : 'burned';
-
         let object = null;
         if (biome === 'safe') {
             if (val2 > 0.94) object = 'flower'; 
         } else {
-            // Brasas raras para parecerem carvões quentes naturais
             if (val2 > 0.985) object = 'ember'; 
         }
-
         return { biome, object, detailVar: val1, offsetX, offsetY };
     }
 }
