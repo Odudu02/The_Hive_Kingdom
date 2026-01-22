@@ -1,4 +1,4 @@
-import { createSeededRandom } from './utils.js';
+import { createSeededRandom, fractalNoise } from './utils.js';
 import InputHandler from './inputs.js';
 
 export default class Game {
@@ -18,9 +18,9 @@ export default class Game {
         this.rng = null;
         this.isRunning = false;
         
-        // Sistema de Partículas
+        // Partículas
         this.particles = [];
-        this.maxParticles = 100; // Quantidade equilibrada para naturalidade
+        this.maxParticles = 120;
         
         this.onPlayerMove = null; 
         this.lastTime = 0;
@@ -61,7 +61,7 @@ export default class Game {
         this.localPlayer.nickname = nickname;
         this.rng = createSeededRandom(this.seed);
         
-        // Inicializa o Pool de Partículas (Invisíveis no início)
+        // Pool de partículas
         for (let i = 0; i < this.maxParticles; i++) {
             this.particles.push({ x: 0, y: 0, vx: 0, vy: 0, life: 0, size: 0, type: 'smoke' });
         }
@@ -114,7 +114,6 @@ export default class Game {
         this.camera.x += (targetCamX - this.camera.x) * 0.1;
         this.camera.y += (targetCamY - this.camera.y) * 0.1;
 
-        // Atualiza Partículas
         this.updateParticles(deltaTime, timestamp);
     }
 
@@ -123,21 +122,17 @@ export default class Game {
             if (p.life > 0) {
                 p.life -= dt;
                 p.y += p.vy * dt;
-                // Efeito de balanço suave (Vento)
-                p.x += Math.sin(time / 500 + p.size) * 0.5;
-                if (p.type === 'smoke') p.size += dt * 5;
+                p.x += Math.sin(time / 600 + p.size) * 0.4;
+                if (p.type === 'smoke') p.size += dt * 4;
             } else {
-                // Respawn da partícula em um tile queimado visível
                 this.respawnParticle(p);
             }
         });
     }
 
     respawnParticle(p) {
-        // Tenta encontrar um ponto aleatório na tela
         const randX = this.camera.x + Math.random() * this.canvas.width;
         const randY = this.camera.y + Math.random() * this.canvas.height;
-        
         const col = Math.floor(randX / this.tileSize);
         const row = Math.floor(randY / this.tileSize);
         const tile = this.getTileData(col, row);
@@ -145,17 +140,17 @@ export default class Game {
         if (tile.biome === 'burned') {
             p.x = randX;
             p.y = randY;
-            p.life = 1 + Math.random() * 2;
-            p.type = Math.random() > 0.7 ? 'soot' : 'smoke';
-            p.vy = -20 - Math.random() * 30; // Sobe
-            p.size = p.type === 'smoke' ? 2 : 1;
+            p.life = 1 + Math.random() * 1.5;
+            p.type = Math.random() > 0.8 ? 'soot' : 'smoke';
+            p.vy = -15 - Math.random() * 25;
+            p.size = p.type === 'smoke' ? 1.5 : 0.8;
         } else {
-            p.life = 0; // Tenta novamente no próximo frame
+            p.life = 0;
         }
     }
 
     draw(timestamp) {
-        this.ctx.fillStyle = '#111'; 
+        this.ctx.fillStyle = '#0a0a0a'; 
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
         const startCol = Math.floor(this.camera.x / this.tileSize);
@@ -166,90 +161,121 @@ export default class Game {
         const offsetX = -this.camera.x + startCol * this.tileSize;
         const offsetY = -this.camera.y + startRow * this.tileSize;
 
-        // 1. Desenha Solo e Objetos
+        // 1. Solo e Biomas
         for (let c = startCol; c <= endCol; c++) {
             for (let r = startRow; r <= endRow; r++) {
                 const x = (c - startCol) * this.tileSize + offsetX;
                 const y = (r - startRow) * this.tileSize + offsetY;
-                const tileData = this.getTileData(c, r);
+                const tile = this.getTileData(c, r);
 
-                if (tileData.biome === 'safe') {
-                    this.ctx.fillStyle = tileData.detailVar > 0.7 ? '#2a7a3f' : '#2d8544';
+                // Solo base
+                if (tile.biome === 'safe') {
+                    // Variação de verde baseada no ruído fino
+                    const g = 110 + (tile.detailVar * 30);
+                    this.ctx.fillStyle = `rgb(40, ${g}, 60)`;
                     this.ctx.fillRect(x, y, this.tileSize, this.tileSize);
+                    
+                    // Detalhe de grama orgânica
+                    if (tile.detailVar > 0.5) {
+                        this.ctx.strokeStyle = `rgba(100, 200, 100, 0.4)`;
+                        this.ctx.beginPath();
+                        this.ctx.moveTo(x + tile.offsetX * 50, y + tile.offsetY * 50);
+                        this.ctx.lineTo(x + tile.offsetX * 50 + 2, y + tile.offsetY * 50 - 4);
+                        this.ctx.stroke();
+                    }
                 } else {
-                    const grayBase = 25 + (tileData.detailVar * 20);
-                    this.ctx.fillStyle = `rgb(${grayBase}, ${grayBase}, ${grayBase})`;
+                    // Variação de cinza/terra queimada
+                    const b = 20 + (tile.detailVar * 25);
+                    this.ctx.fillStyle = `rgb(${b}, ${b-5}, ${b-5})`;
                     this.ctx.fillRect(x, y, this.tileSize, this.tileSize);
+                    
+                    // Manchas de fuligem aglomeradas
+                    if (tile.detailVar < 0.3) {
+                        this.ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                        this.ctx.beginPath();
+                        this.ctx.arc(x + 32, y + 32, 10 + tile.detailVar * 20, 0, Math.PI * 2);
+                        this.ctx.fill();
+                    }
                 }
 
-                if (tileData.object === 'flower' && this.assets['flower']) {
+                // Objetos (Flores e Brasas)
+                if (tile.object === 'flower' && this.assets['flower']) {
                     this.ctx.drawImage(this.assets['flower'], x+8, y+8, 48, 48);
-                } else if (tileData.object === 'ember') {
-                    const individualPulse = (Math.sin((timestamp / 400) + (tileData.detailVar * 10)) + 1) / 2;
-                    this.ctx.fillStyle = `rgba(255, ${80 + (individualPulse * 120)}, 20, ${0.4 + individualPulse * 0.6})`;
+                } else if (tile.object === 'ember') {
+                    const pulse = (Math.sin((timestamp / 450) + (tile.detailVar * 20)) + 1) / 2;
+                    this.ctx.fillStyle = `rgba(255, ${60 + pulse * 140}, 0, ${0.3 + pulse * 0.7})`;
                     this.ctx.beginPath();
-                    this.ctx.arc(x + 12 + (tileData.offsetX * 40), y + 12 + (tileData.offsetY * 40), 2 + (individualPulse * 2), 0, Math.PI * 2);
+                    this.ctx.arc(x + 10 + tile.offsetX * 44, y + 10 + tile.offsetY * 44, 1.5 + pulse * 2.5, 0, Math.PI * 2);
                     this.ctx.fill();
                 }
             }
         }
 
-        // 2. Desenha Partículas (Fumaça e Fuligem)
         this.drawParticles();
-
-        // 3. Desenha Players
         this.remotePlayers.forEach(p => this.drawPlayer(p, 'yellow'));
         this.drawPlayer(this.localPlayer, 'white');
     }
 
     drawParticles() {
+        this.ctx.save();
         this.particles.forEach(p => {
             if (p.life > 0) {
-                const alpha = Math.min(p.life, 0.5); // Transparência suave
-                this.ctx.fillStyle = p.type === 'smoke' ? `rgba(150, 150, 150, ${alpha * 0.4})` : `rgba(0, 0, 0, ${alpha})`;
+                const alpha = Math.min(p.life, 0.4);
+                this.ctx.fillStyle = p.type === 'smoke' ? `rgba(100, 100, 100, ${alpha * 0.3})` : `rgba(0, 0, 0, ${alpha * 0.8})`;
                 this.ctx.beginPath();
                 this.ctx.arc(p.x - this.camera.x, p.y - this.camera.y, p.size, 0, Math.PI * 2);
                 this.ctx.fill();
             }
         });
+        this.ctx.restore();
     }
 
     drawPlayer(player, color) {
-        const screenX = player.x - this.camera.x;
-        const screenY = player.y - this.camera.y;
-        let spriteKey = `bee_${player.facing}`;
-        const sprite = this.assets[spriteKey] || this.assets['bee_idle'];
+        const sx = player.x - this.camera.x;
+        const sy = player.y - this.camera.y;
+        let sprite = this.assets[`bee_${player.facing}`] || this.assets['bee_idle'];
 
         if (sprite) {
-            this.ctx.drawImage(sprite, screenX, screenY, 64, 64);
+            this.ctx.drawImage(sprite, sx, sy, 64, 64);
         } else {
             this.ctx.fillStyle = color;
-            this.ctx.fillRect(screenX, screenY, 64, 64);
+            this.ctx.fillRect(sx, sy, 64, 64);
         }
 
         this.ctx.fillStyle = 'white';
-        this.ctx.font = 'bold 14px Segoe UI';
+        this.ctx.font = 'bold 13px Segoe UI';
         this.ctx.textAlign = 'center';
-        this.ctx.fillText(player.nickname || '?', screenX + 32, screenY - 10);
+        this.ctx.fillText(player.nickname || '?', sx + 32, sy - 8);
     }
 
     getTileData(col, row) {
-        const localSeed = `${this.seed}_${col}_${row}`;
-        const rng = createSeededRandom(localSeed);
-        const val1 = rng(); 
-        const val2 = rng();
+        const seedStr = `${this.seed}_${col}_${row}`;
+        const rng = createSeededRandom(seedStr);
+        
+        // NOVO: Motor de bioma Fractal (Oitavas de Ruído)
+        // Isso cria massas orgânicas em vez de um círculo
+        const biomeNoise = fractalNoise(col, row, 3, 0.5, 0.08, this.seed);
+        
+        // Centro do mapa ainda é o ponto seguro principal
+        const dist = Math.sqrt(col*col + row*row);
+        const centerInfluence = Math.max(0, 1 - dist / 5);
+        
+        // Combina o ruído com a influência do centro
+        const finalValue = biomeNoise + centerInfluence * 0.8;
+
+        let biome = finalValue > 0.65 ? 'safe' : 'burned';
+
+        const detailVar = rng();
         const offsetX = rng();
         const offsetY = rng();
-        const dist = Math.sqrt(col*col + row*row);
-        const noise = (val1 * 2.8); 
-        const safeZoneRadius = 3.2;
-        let biome = (dist < safeZoneRadius + noise) ? 'safe' : 'burned';
+
         let object = null;
         if (biome === 'safe') {
-            if (val2 > 0.94) object = 'flower'; 
+            if (rng() > 0.93) object = 'flower';
         } else {
-            if (val2 > 0.985) object = 'ember'; 
+            if (rng() > 0.982) object = 'ember';
         }
-        return { biome, object, detailVar: val1, offsetX, offsetY };
+
+        return { biome, object, detailVar, offsetX, offsetY };
     }
 }
