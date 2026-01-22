@@ -1,97 +1,96 @@
-import UI from './ui.js';
-import NetworkManager from './network.js';
-import Game from './game.js';
-
-class GameApp {
-    constructor() {
-        this.ui = new UI();
-        this.network = new NetworkManager();
-        this.game = new Game();
-        
-        this.lastSent = 0;
-        this.sendRate = 45; // Pequeno ajuste para 45ms (aprox. 22hz) para maior fluidez
-
-        this.init();
+/**
+ * Algoritmo PRNG (Pseudo-Random Number Generator) determinístico.
+ */
+export function createSeededRandom(seed) {
+    let seedNum = 0;
+    if (typeof seed === 'string') {
+        for (let i = 0; i < seed.length; i++) {
+            seedNum = (seedNum + seed.charCodeAt(i)) | 0;
+        }
+    } else {
+        seedNum = seed;
     }
-
-    init() {
-        // --- 1. Eventos de Rede ---
-        this.network.onDataReceived = (pkg) => {
-            switch(pkg.type) {
-                case 'WELCOME':
-                    console.log("[MAIN] Conectado ao Host. Sincronizando biomas...");
-                    const myNick = this.ui.inputs.nickname.value.trim() || "Zangão";
-                    this.startGame(pkg.data.seed, this.network.myId, myNick);
-                    break;
-                
-                case 'PLAYER_MOVE':
-                    this.game.updateRemotePlayer(pkg.id, pkg.data);
-                    break;
-
-                case 'PLAYER_DISCONNECT':
-                    this.game.removePlayer(pkg.id);
-                    break;
-            }
-        };
-
-        // --- 2. Eventos do Jogo ---
-        this.game.onPlayerMove = (data) => {
-            const now = Date.now();
-            if (now - this.lastSent > this.sendRate) {
-                this.network.broadcast({
-                    type: 'PLAYER_MOVE',
-                    id: this.network.myId,
-                    data: data
-                });
-                this.lastSent = now;
-            }
-        };
-
-        // --- 3. Eventos de UI ---
-        this.ui.buttons.startHost.addEventListener('click', async () => {
-            const data = this.ui.getHostData();
-            if (!data.sessionId) return alert("ID da sessão é obrigatório.");
-            
-            try {
-                const id = await this.network.init(data.sessionId);
-                this.network.startHosting({ seed: data.seed });
-                
-                console.log(`[MAIN] Reino Fundado! Seed: ${data.seed}`);
-                this.startGame(data.seed, id, data.nickname || "Rei");
-            } catch (e) {
-                alert("Erro: ID em uso. Tente outro nome para o seu reino.");
-                console.error(e);
-            }
-        });
-
-        this.ui.buttons.startJoin.addEventListener('click', async () => {
-            const data = this.ui.getJoinData();
-            if (!data.targetSessionId) return alert("ID do Reino destino é necessário.");
-
-            try {
-                await this.network.init(null);
-                this.network.connectToHost(data.targetSessionId);
-            } catch (e) {
-                console.error(e);
-                alert("Não foi possível localizar este reino.");
-            }
-        });
-    }
-
-    async startGame(seed, id, nick) {
-        if (this.game.isRunning) return;
-
-        // Feedback visual de carregamento pode ser adicionado aqui futuramente
-        await this.game.loadAssets();
-        
-        this.ui.showScreen('game');
-        
-        // Inicializa o motor com suporte aos novos biomas e detalhes orgânicos
-        this.game.init(seed, id, nick);
-        console.log("[MAIN] Jogo iniciado com sucesso.");
+    
+    return function() {
+        var t = seedNum += 0x6D2B79F5;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     }
 }
 
-window.onload = () => {
-    window.gameApp = new GameApp();
-};
+/**
+ * Interpolação Linear (LERP)
+ */
+export function lerp(start, end, amt) {
+    return (1 - amt) * start + amt * end;
+}
+
+/**
+ * biLerp: Interpolação entre 4 pontos em uma grade 2D (Essencial para ruído suave).
+ */
+export function biLerp(v00, v10, v01, v11, tx, ty) {
+    return lerp(lerp(v00, v10, tx), lerp(v01, v11, tx), ty);
+}
+
+/**
+ * Hash 2D determinístico para geração de Ruído.
+ */
+export function hash2d(x, y, seed) {
+    const s = typeof seed === 'string' ? seed.length : seed;
+    const val = Math.sin(x * 12.9898 + y * 78.233 + s) * 43758.5453123;
+    return val - Math.floor(val);
+}
+
+/**
+ * Value Noise 2D
+ * Gera um ruído suave interpolado.
+ */
+export function valueNoise(x, y, seed) {
+    const iX = Math.floor(x);
+    const iY = Math.floor(y);
+    const fX = x - iX;
+    const fY = y - iY;
+
+    // Suavização da curva (Smoothstep)
+    const sx = fX * fX * (3 - 2 * fX);
+    const sy = fY * fY * (3 - 2 * fY);
+
+    const v00 = hash2d(iX, iY, seed);
+    const v10 = hash2d(iX + 1, iY, seed);
+    const v01 = hash2d(iX, iY + 1, seed);
+    const v11 = hash2d(iX + 1, iY + 1, seed);
+
+    return biLerp(v00, v10, v01, v11, sx, sy);
+}
+
+/**
+ * Fractal Noise (FBM - Fractal Brownian Motion)
+ * Cria o efeito de realismo combinando oitavas de ruído.
+ */
+
+export function fractalNoise(x, y, octaves, persistence, scale, seed) {
+    let total = 0;
+    let frequency = scale;
+    let amplitude = 1;
+    let maxValue = 0;
+    
+    for (let i = 0; i < octaves; i++) {
+        total += valueNoise(x * frequency, y * frequency, seed + i) * amplitude;
+        maxValue += amplitude;
+        amplitude *= persistence;
+        frequency *= 2;
+    }
+    
+    return total / maxValue;
+}
+
+/**
+ * Função para gerar IDs únicos (UUID)
+ */
+export function generateUUID() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
+}
