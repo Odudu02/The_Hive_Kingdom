@@ -1,11 +1,75 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-br">
 <head>
-<meta charset='UTF-8'>
-<title>Bee Game</title>
-<link rel='stylesheet' href='css/style.css'>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Hive Kingdom</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 </head>
 <body>
-<script src='js/main.js'></script>
+
+    <div id="app">
+        <section id="screen-login" class="screen active">
+            <h1>The Hive Kingdom</h1>
+            <div class="form-group">
+                <label for="nickname">Seu Nickname de Abelha</label>
+                <input type="text" id="nickname" placeholder="Ex: Zangão01" maxlength="15">
+            </div>
+            <div class="button-group">
+                <button id="btn-goto-host" class="btn primary">Fundar Reino (Host)</button>
+                <button id="btn-goto-join" class="btn secondary">Entrar em um Reino</button>
+            </div>
+        </section>
+
+        <section id="screen-host" class="screen hidden">
+            <h2>Fundar Novo Reino</h2>
+            <div class="form-group">
+                <label for="host-id">ID da Sessão (Personalizado)</label>
+                <input type="text" id="host-id" placeholder="Ex: colmeia-mestre">
+                <small>Este será o ID que seus amigos usarão para conectar.</small>
+            </div>
+            <div class="form-group">
+                <label for="host-password">Senha da Sessão (Opcional)</label>
+                <input type="password" id="host-password" placeholder="Senha segura">
+            </div>
+            <div class="form-group">
+                <label for="host-seed">Seed do Mundo</label>
+                <div class="input-row">
+                    <input type="text" id="host-seed" placeholder="Deixe vazio para aleatório">
+                    <button id="btn-random-seed" class="btn small">Aleatório</button>
+                </div>
+                <small>Define a geração procedural do mapa infinito.</small>
+            </div>
+            <div class="button-group">
+                <button id="btn-start-host" class="btn primary">Criar Reino</button>
+                <button id="btn-back-host" class="btn danger">Voltar</button>
+            </div>
+        </section>
+
+        <section id="screen-join" class="screen hidden">
+            <h2>Entrar na Colmeia</h2>
+            <div class="form-group">
+                <label for="join-id">ID da Sessão do Host</label>
+                <input type="text" id="join-id" placeholder="Ex: colmeia-mestre">
+            </div>
+            <div class="form-group">
+                <label for="join-password">Senha (Se houver)</label>
+                <input type="password" id="join-password" placeholder="Senha da sala">
+            </div>
+            <div class="button-group">
+                <button id="btn-start-join" class="btn primary">Conectar</button>
+                <button id="btn-back-join" class="btn danger">Voltar</button>
+            </div>
+        </section>
+
+        <section id="screen-game" class="screen hidden">
+            <canvas id="game-canvas"></canvas>
+            <div id="ui-overlay">
+                </div>
+        </section>
+    </div>
+
+    <script type="module" src="js/main.js"></script>
 </body>
 </html>
