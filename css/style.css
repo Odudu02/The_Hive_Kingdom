@@ -7,35 +7,28 @@
 }
 
 body {
-    margin: 0;
-    padding: 0;
+    margin: 0; padding: 0;
     background-color: var(--bg-color);
     color: var(--text-color);
     font-family: 'Segoe UI', sans-serif;
-    overflow: hidden; /* Impede rolagem */
-    touch-action: none; /* Impede zoom/gestos nativos no mobile */
+    overflow: hidden;
+    touch-action: none; /* Impede zoom e scroll no mobile */
     user-select: none;
 }
 
 #app {
-    width: 100vw;
-    height: 100vh;
+    width: 100vw; height: 100vh;
     position: relative;
-    display: flex;
-    justify-content: center;
-    align-items: center;
+    display: flex; justify-content: center; align-items: center;
 }
 
-/* Telas de Menu (Janelas Flutuantes) */
+/* Telas de Menu */
 .screen:not(#screen-game) {
     background-color: var(--panel-color);
     padding: 25px;
     border-radius: 12px;
-    width: 90%;
-    max-width: 400px;
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
+    width: 90%; max-width: 400px;
+    display: flex; flex-direction: column; gap: 15px;
     box-shadow: 0 10px 25px rgba(0,0,0,0.5);
     z-index: 10;
 }
@@ -43,71 +36,62 @@ body {
 .screen.hidden { display: none !important; }
 .screen.active { display: flex !important; }
 
-/* Inputs e Botões */
+/* Formulários */
 .form-group { display: flex; flex-direction: column; gap: 5px; }
 label { font-size: 0.85rem; color: #aaa; font-weight: bold; }
 input { padding: 12px; background: #111; border: 1px solid #444; color: white; border-radius: 6px; }
 .input-row { display: flex; gap: 10px; }
 .input-row input { flex: 1; }
 
-button { padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
-button:active { transform: scale(0.98); }
+/* Botões */
+button { padding: 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
 .primary { background: var(--accent-color); color: #111; }
 .secondary { border: 2px solid var(--accent-color); background: transparent; color: var(--accent-color); }
 .danger { border: 1px solid var(--danger-color); background: transparent; color: var(--danger-color); }
 .small { padding: 0 15px; }
 
-/* Tela de Jogo */
+/* Jogo */
 #screen-game { width: 100%; height: 100%; position: relative; }
 canvas { display: block; width: 100%; height: 100%; }
 
-/* HUD e Mobile Controls */
 #game-ui {
-    position: absolute;
-    top: 0; left: 0; width: 100%; height: 100%;
-    pointer-events: none; /* Deixa passar clique para o canvas (PC) */
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; /* Permite clicar através da UI no PC */
 }
 
-#debug-info {
+#info-display {
     position: absolute; top: 10px; right: 10px;
-    background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 4px;
-    font-size: 0.8rem; font-family: monospace; color: lime;
+    background: rgba(0,0,0,0.5); padding: 5px; border-radius: 4px; color: lime; font-family: monospace;
 }
 
+/* Mobile Controls */
 #mobile-controls {
-    display: none; /* Oculto em PC por padrão */
+    display: none; /* Escondido no PC */
     position: absolute; bottom: 20px; width: 100%; height: 150px;
     padding: 0 30px; box-sizing: border-box;
     justify-content: space-between; align-items: center;
-    pointer-events: auto; /* Habilita toque nos controles */
+    pointer-events: auto; /* Habilita toque */
 }
 
-/* Mostra controles apenas em telas touch ou pequenas */
 @media (hover: none) and (pointer: coarse), (max-width: 768px) {
     #mobile-controls { display: flex; }
 }
 
 #joystick-zone {
     width: 120px; height: 120px;
-    background: rgba(255, 255, 255, 0.1);
-    border: 2px solid rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.2);
     border-radius: 50%; position: relative;
 }
 
 #joystick-knob {
-    width: 50px; height: 50px;
-    background: var(--accent-color);
+    width: 50px; height: 50px; background: var(--accent-color);
     border-radius: 50%; position: absolute;
     top: 50%; left: 50%; transform: translate(-50%, -50%);
-    box-shadow: 0 0 10px rgba(0,0,0,0.5);
 }
 
 #action-button {
     width: 90px; height: 90px;
-    background: rgba(255, 255, 255, 0.15);
-    border: 3px solid rgba(255,255,255,0.5);
-    border-radius: 50%;
-    display: flex; justify-content: center; align-items: center;
-    font-weight: bold; color: white; user-select: none;
+    background: rgba(255,255,255,0.15); border: 3px solid rgba(255,255,255,0.5);
+    border-radius: 50%; display: flex; justify-content: center; align-items: center;
+    color: white; font-weight: bold;
 }
-#action-button:active { background: white; color: black; }
