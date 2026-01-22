@@ -6,25 +6,15 @@ export default class Game {
         this.canvas = document.getElementById('game-canvas');
         this.ctx = this.canvas.getContext('2d');
         this.input = new InputHandler();
-
         this.tileSize = 64;
         this.camera = { x: 0, y: 0 };
         this.assets = {};
-        
-        this.localPlayer = { x: 0, y: 0, speed: 300, facing: 'down', nickname: 'Eu' };
+        this.localPlayer = { x: 0, y: 0, speed: 300, facing: 'down', nickname: 'Abelha' };
         this.remotePlayers = new Map();
-        
-        this.seed = null;
-        this.rng = null;
-        this.isRunning = false;
-        
-        // Partículas
         this.particles = [];
         this.maxParticles = 120;
-        
-        this.onPlayerMove = null; 
-        this.lastTime = 0;
-
+        this.isRunning = false;
+        this.onPlayerMove = null;
         this.resize();
         window.addEventListener('resize', () => this.resize());
     }
@@ -35,247 +25,148 @@ export default class Game {
     }
 
     async loadAssets() {
-        const imageList = {
-            'bee_idle': 'assets/BeeIdle.png',
-            'bee_up': 'assets/BeeUp.png',
-            'bee_down': 'assets/BeeDown.png',
-            'bee_left': 'assets/BeeLeft.png',
-            'bee_right': 'assets/BeeRight.png',
-            'flower': 'assets/Flower.png'
+        const list = {
+            'bee_idle': 'assets/BeeIdle.png', 'bee_up': 'assets/BeeUp.png',
+            'bee_down': 'assets/BeeDown.png', 'bee_left': 'assets/BeeLeft.png',
+            'bee_right': 'assets/BeeRight.png', 'flower': 'assets/Flower.png'
         };
-
-        const promises = Object.keys(imageList).map(key => {
-            return new Promise((resolve) => {
-                const img = new Image();
-                img.src = imageList[key];
-                img.onload = () => { this.assets[key] = img; resolve(); };
-                img.onerror = () => resolve(); 
-            });
-        });
+        const promises = Object.keys(list).map(k => new Promise(res => {
+            const img = new Image(); img.src = list[k];
+            img.onload = () => { this.assets[k] = img; res(); };
+            img.onerror = () => res();
+        }));
         await Promise.all(promises);
     }
 
-    init(seed, myId, nickname) {
+    init(seed, myId, nick) {
         this.seed = seed;
         this.myId = myId;
-        this.localPlayer.nickname = nickname;
-        this.rng = createSeededRandom(this.seed);
-        
-        // Pool de partículas
+        this.localPlayer.nickname = nick;
+        this.particles = [];
         for (let i = 0; i < this.maxParticles; i++) {
             this.particles.push({ x: 0, y: 0, vx: 0, vy: 0, life: 0, size: 0, type: 'smoke' });
         }
-
         this.isRunning = true;
         this.lastTime = performance.now();
         requestAnimationFrame((t) => this.loop(t));
     }
 
-    updateRemotePlayer(id, data) {
-        if (id === this.myId) return;
-        this.remotePlayers.set(id, data);
-    }
-
-    removePlayer(id) {
-        this.remotePlayers.delete(id);
-    }
-
     loop(timestamp) {
         if (!this.isRunning) return;
-        const deltaTime = (timestamp - this.lastTime) / 1000;
+        const dt = (timestamp - this.lastTime) / 1000;
         this.lastTime = timestamp;
-
-        this.update(deltaTime, timestamp);
+        this.update(dt, timestamp);
         this.draw(timestamp);
-
         requestAnimationFrame((t) => this.loop(t));
     }
 
-    update(deltaTime, timestamp) {
+    update(dt, time) {
         const input = this.input.getState();
-
         if (input.isMoving) {
-            this.localPlayer.x += input.x * this.localPlayer.speed * deltaTime;
-            this.localPlayer.y += input.y * this.localPlayer.speed * deltaTime;
+            this.localPlayer.x += input.x * this.localPlayer.speed * dt;
+            this.localPlayer.y += input.y * this.localPlayer.speed * dt;
             this.localPlayer.facing = input.facing;
-
-            if (this.onPlayerMove) {
-                this.onPlayerMove({
-                    x: Math.round(this.localPlayer.x),
-                    y: Math.round(this.localPlayer.y),
-                    facing: this.localPlayer.facing,
-                    nickname: this.localPlayer.nickname
-                });
-            }
+            if (this.onPlayerMove) this.onPlayerMove({
+                x: Math.round(this.localPlayer.x), y: Math.round(this.localPlayer.y),
+                facing: this.localPlayer.facing, nickname: this.localPlayer.nickname
+            });
         }
-
-        const targetCamX = this.localPlayer.x - this.canvas.width / 2;
-        const targetCamY = this.localPlayer.y - this.canvas.height / 2;
-        this.camera.x += (targetCamX - this.camera.x) * 0.1;
-        this.camera.y += (targetCamY - this.camera.y) * 0.1;
-
-        this.updateParticles(deltaTime, timestamp);
-    }
-
-    updateParticles(dt, time) {
+        this.camera.x += (this.localPlayer.x - this.canvas.width/2 - this.camera.x) * 0.1;
+        this.camera.y += (this.localPlayer.y - this.canvas.height/2 - this.camera.y) * 0.1;
+        
+        // Update Partículas
         this.particles.forEach(p => {
             if (p.life > 0) {
-                p.life -= dt;
-                p.y += p.vy * dt;
+                p.life -= dt; p.y += p.vy * dt;
                 p.x += Math.sin(time / 600 + p.size) * 0.4;
                 if (p.type === 'smoke') p.size += dt * 4;
-            } else {
-                this.respawnParticle(p);
-            }
+            } else { this.respawnParticle(p); }
         });
     }
 
     respawnParticle(p) {
-        const randX = this.camera.x + Math.random() * this.canvas.width;
-        const randY = this.camera.y + Math.random() * this.canvas.height;
-        const col = Math.floor(randX / this.tileSize);
-        const row = Math.floor(randY / this.tileSize);
-        const tile = this.getTileData(col, row);
-
+        const rx = this.camera.x + Math.random() * this.canvas.width;
+        const ry = this.camera.y + Math.random() * this.canvas.height;
+        const tile = this.getTileData(Math.floor(rx/64), Math.floor(ry/64));
         if (tile.biome === 'burned') {
-            p.x = randX;
-            p.y = randY;
-            p.life = 1 + Math.random() * 1.5;
+            p.x = rx; p.y = ry; p.life = 1 + Math.random();
             p.type = Math.random() > 0.8 ? 'soot' : 'smoke';
-            p.vy = -15 - Math.random() * 25;
-            p.size = p.type === 'smoke' ? 1.5 : 0.8;
-        } else {
-            p.life = 0;
-        }
+            p.vy = -20 - Math.random() * 20; p.size = 1.5;
+        } else { p.life = 0; }
     }
 
     draw(timestamp) {
-        this.ctx.fillStyle = '#0a0a0a'; 
+        this.ctx.fillStyle = '#0a0a0a';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-        const startCol = Math.floor(this.camera.x / this.tileSize);
-        const endCol = startCol + (this.canvas.width / this.tileSize) + 1;
-        const startRow = Math.floor(this.camera.y / this.tileSize);
-        const endRow = startRow + (this.canvas.height / this.tileSize) + 1;
+        const startCol = Math.floor(this.camera.x / 64);
+        const endCol = startCol + (this.canvas.width / 64) + 1;
+        const startRow = Math.floor(this.camera.y / 64);
+        const endRow = startRow + (this.canvas.height / 64) + 1;
 
-        const offsetX = -this.camera.x + startCol * this.tileSize;
-        const offsetY = -this.camera.y + startRow * this.tileSize;
-
-        // 1. Solo e Biomas
         for (let c = startCol; c <= endCol; c++) {
             for (let r = startRow; r <= endRow; r++) {
-                const x = (c - startCol) * this.tileSize + offsetX;
-                const y = (r - startRow) * this.tileSize + offsetY;
+                const x = c * 64 - this.camera.x;
+                const y = r * 64 - this.camera.y;
                 const tile = this.getTileData(c, r);
 
-                // Solo base
                 if (tile.biome === 'safe') {
-                    // Variação de verde baseada no ruído fino
-                    const g = 110 + (tile.detailVar * 30);
-                    this.ctx.fillStyle = `rgb(40, ${g}, 60)`;
-                    this.ctx.fillRect(x, y, this.tileSize, this.tileSize);
-                    
-                    // Detalhe de grama orgânica
-                    if (tile.detailVar > 0.5) {
-                        this.ctx.strokeStyle = `rgba(100, 200, 100, 0.4)`;
-                        this.ctx.beginPath();
-                        this.ctx.moveTo(x + tile.offsetX * 50, y + tile.offsetY * 50);
-                        this.ctx.lineTo(x + tile.offsetX * 50 + 2, y + tile.offsetY * 50 - 4);
-                        this.ctx.stroke();
-                    }
+                    this.ctx.fillStyle = `rgb(40, ${110 + tile.detailVar * 30}, 60)`;
                 } else {
-                    // Variação de cinza/terra queimada
-                    const b = 20 + (tile.detailVar * 25);
-                    this.ctx.fillStyle = `rgb(${b}, ${b-5}, ${b-5})`;
-                    this.ctx.fillRect(x, y, this.tileSize, this.tileSize);
-                    
-                    // Manchas de fuligem aglomeradas
-                    if (tile.detailVar < 0.3) {
-                        this.ctx.fillStyle = 'rgba(0,0,0,0.2)';
-                        this.ctx.beginPath();
-                        this.ctx.arc(x + 32, y + 32, 10 + tile.detailVar * 20, 0, Math.PI * 2);
-                        this.ctx.fill();
-                    }
+                    const b = 20 + tile.detailVar * 20;
+                    this.ctx.fillStyle = `rgb(${b}, ${b-2}, ${b-2})`;
                 }
+                this.ctx.fillRect(x, y, 65, 65); // 65 para evitar frestas
 
-                // Objetos (Flores e Brasas)
                 if (tile.object === 'flower' && this.assets['flower']) {
                     this.ctx.drawImage(this.assets['flower'], x+8, y+8, 48, 48);
                 } else if (tile.object === 'ember') {
-                    const pulse = (Math.sin((timestamp / 450) + (tile.detailVar * 20)) + 1) / 2;
-                    this.ctx.fillStyle = `rgba(255, ${60 + pulse * 140}, 0, ${0.3 + pulse * 0.7})`;
+                    const pulse = (Math.sin(timestamp/450 + tile.detailVar*20) + 1) / 2;
+                    this.ctx.fillStyle = `rgba(255, ${100 + pulse*100}, 0, ${0.4 + pulse*0.6})`;
                     this.ctx.beginPath();
-                    this.ctx.arc(x + 10 + tile.offsetX * 44, y + 10 + tile.offsetY * 44, 1.5 + pulse * 2.5, 0, Math.PI * 2);
+                    this.ctx.arc(x + 10 + tile.offsetX*44, y + 10 + tile.offsetY*44, 2 + pulse*2, 0, Math.PI*2);
                     this.ctx.fill();
                 }
             }
         }
 
-        this.drawParticles();
+        // Desenha Fumaça
+        this.particles.forEach(p => {
+            if (p.life > 0) {
+                this.ctx.fillStyle = p.type === 'smoke' ? `rgba(100,100,100,${p.life*0.2})` : `rgba(0,0,0,${p.life*0.5})`;
+                this.ctx.beginPath();
+                this.ctx.arc(p.x - this.camera.x, p.y - this.camera.y, p.size, 0, Math.PI*2);
+                this.ctx.fill();
+            }
+        });
+
         this.remotePlayers.forEach(p => this.drawPlayer(p, 'yellow'));
         this.drawPlayer(this.localPlayer, 'white');
     }
 
-    drawParticles() {
-        this.ctx.save();
-        this.particles.forEach(p => {
-            if (p.life > 0) {
-                const alpha = Math.min(p.life, 0.4);
-                this.ctx.fillStyle = p.type === 'smoke' ? `rgba(100, 100, 100, ${alpha * 0.3})` : `rgba(0, 0, 0, ${alpha * 0.8})`;
-                this.ctx.beginPath();
-                this.ctx.arc(p.x - this.camera.x, p.y - this.camera.y, p.size, 0, Math.PI * 2);
-                this.ctx.fill();
-            }
-        });
-        this.ctx.restore();
-    }
-
-    drawPlayer(player, color) {
-        const sx = player.x - this.camera.x;
-        const sy = player.y - this.camera.y;
-        let sprite = this.assets[`bee_${player.facing}`] || this.assets['bee_idle'];
-
-        if (sprite) {
-            this.ctx.drawImage(sprite, sx, sy, 64, 64);
-        } else {
-            this.ctx.fillStyle = color;
-            this.ctx.fillRect(sx, sy, 64, 64);
-        }
-
-        this.ctx.fillStyle = 'white';
-        this.ctx.font = 'bold 13px Segoe UI';
-        this.ctx.textAlign = 'center';
-        this.ctx.fillText(player.nickname || '?', sx + 32, sy - 8);
+    drawPlayer(p, color) {
+        const sx = p.x - this.camera.x, sy = p.y - this.camera.y;
+        const sprite = this.assets[`bee_${p.facing}`] || this.assets['bee_idle'];
+        if (sprite) this.ctx.drawImage(sprite, sx, sy, 64, 64);
+        else { this.ctx.fillStyle = color; this.ctx.fillRect(sx, sy, 64, 64); }
+        this.ctx.fillStyle = 'white'; this.ctx.font = 'bold 13px Arial';
+        this.ctx.textAlign = 'center'; this.ctx.fillText(p.nickname, sx+32, sy-10);
     }
 
     getTileData(col, row) {
-        const seedStr = `${this.seed}_${col}_${row}`;
-        const rng = createSeededRandom(seedStr);
-        
-        // NOVO: Motor de bioma Fractal (Oitavas de Ruído)
-        // Isso cria massas orgânicas em vez de um círculo
-        const biomeNoise = fractalNoise(col, row, 3, 0.5, 0.08, this.seed);
-        
-        // Centro do mapa ainda é o ponto seguro principal
+        const rng = createSeededRandom(`${this.seed}_${col}_${row}`);
+        const noise = fractalNoise(col, row, 3, 0.5, 0.08, this.seed);
         const dist = Math.sqrt(col*col + row*row);
-        const centerInfluence = Math.max(0, 1 - dist / 5);
+        const centerInf = Math.max(0, 1 - dist / 5);
         
-        // Combina o ruído com a influência do centro
-        const finalValue = biomeNoise + centerInfluence * 0.8;
-
-        let biome = finalValue > 0.65 ? 'safe' : 'burned';
-
-        const detailVar = rng();
-        const offsetX = rng();
-        const offsetY = rng();
-
+        let biome = (noise + centerInf * 0.8) > 0.65 ? 'safe' : 'burned';
         let object = null;
-        if (biome === 'safe') {
-            if (rng() > 0.93) object = 'flower';
-        } else {
-            if (rng() > 0.982) object = 'ember';
-        }
+        if (biome === 'safe' && rng() > 0.94) object = 'flower';
+        else if (biome === 'burned' && rng() > 0.98) object = 'ember';
 
-        return { biome, object, detailVar, offsetX, offsetY };
+        return { biome, object, detailVar: rng(), offsetX: rng(), offsetY: rng() };
     }
+
+    updateRemotePlayer(id, data) { this.remotePlayers.set(id, data); }
+    removePlayer(id) { this.remotePlayers.delete(id); }
 }
