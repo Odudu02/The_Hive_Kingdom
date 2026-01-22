@@ -9,7 +9,7 @@ class GameApp {
         this.game = new Game();
         
         this.lastSent = 0;
-        this.sendRate = 50; //ms
+        this.sendRate = 45; // Pequeno ajuste para 45ms (aprox. 22hz) para maior fluidez
 
         this.init();
     }
@@ -19,9 +19,8 @@ class GameApp {
         this.network.onDataReceived = (pkg) => {
             switch(pkg.type) {
                 case 'WELCOME':
-                    console.log("[MAIN] Conectado. Seed:", pkg.data.seed);
-                    // Captura o nickname do input ou define um padrão
-                    const myNick = this.ui.inputs.nickname.value.trim() || "Convidado";
+                    console.log("[MAIN] Conectado ao Host. Sincronizando biomas...");
+                    const myNick = this.ui.inputs.nickname.value.trim() || "Zangão";
                     this.startGame(pkg.data.seed, this.network.myId, myNick);
                     break;
                 
@@ -51,52 +50,48 @@ class GameApp {
         // --- 3. Eventos de UI ---
         this.ui.buttons.startHost.addEventListener('click', async () => {
             const data = this.ui.getHostData();
-            if (!data.sessionId) return alert("Defina o ID da sessão para fundar o reino.");
+            if (!data.sessionId) return alert("ID da sessão é obrigatório.");
             
             try {
-                // Inicializa o Peer com o ID personalizado
                 const id = await this.network.init(data.sessionId);
                 this.network.startHosting({ seed: data.seed });
                 
-                console.log(`[MAIN] Reino Criado! ID: ${id} | Seed: ${data.seed}`);
-                this.startGame(data.seed, id, data.nickname || "Host");
+                console.log(`[MAIN] Reino Fundado! Seed: ${data.seed}`);
+                this.startGame(data.seed, id, data.nickname || "Rei");
             } catch (e) {
-                alert("Erro: Este ID já pode estar em uso ou houve falha na rede.");
+                alert("Erro: ID em uso. Tente outro nome para o seu reino.");
                 console.error(e);
             }
         });
 
         this.ui.buttons.startJoin.addEventListener('click', async () => {
             const data = this.ui.getJoinData();
-            if (!data.targetSessionId) return alert("Informe o ID do Reino que deseja entrar.");
+            if (!data.targetSessionId) return alert("ID do Reino destino é necessário.");
 
             try {
-                // Guests usam ID aleatório gerado pelo PeerJS
                 await this.network.init(null);
                 this.network.connectToHost(data.targetSessionId);
             } catch (e) {
                 console.error(e);
-                alert("Erro ao tentar conectar ao reino.");
+                alert("Não foi possível localizar este reino.");
             }
         });
     }
 
     async startGame(seed, id, nick) {
-        // Bloqueia cliques repetidos durante o carregamento
         if (this.game.isRunning) return;
 
-        console.log("[MAIN] Carregando recursos do Reino...");
+        // Feedback visual de carregamento pode ser adicionado aqui futuramente
         await this.game.loadAssets();
         
-        // Transição visual de telas
         this.ui.showScreen('game');
         
-        // Inicializa o motor do jogo com a seed e dados do player
+        // Inicializa o motor com suporte aos novos biomas e detalhes orgânicos
         this.game.init(seed, id, nick);
+        console.log("[MAIN] Jogo iniciado com sucesso.");
     }
 }
 
-// Inicialização Global
 window.onload = () => {
     window.gameApp = new GameApp();
 };
