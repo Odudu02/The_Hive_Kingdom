@@ -1,6 +1,5 @@
 /**
  * Algoritmo PRNG (Pseudo-Random Number Generator) determinístico.
- * Mantido para garantir que a seed gere o mesmo mundo para todos.
  */
 export function createSeededRandom(seed) {
     let seedNum = 0;
@@ -22,20 +21,30 @@ export function createSeededRandom(seed) {
 
 /**
  * Interpolação Linear (LERP)
- * Ajuda a suavizar transições de cores e posições.
  */
 export function lerp(start, end, amt) {
     return (1 - amt) * start + amt * end;
 }
 
 /**
- * Função de Hash 2D para ruído orgânico.
- * Retorna um valor determinístico baseado em coordenadas X e Y.
- * Útil para criar bordas de biomas que não pareçam blocos.
+ * Hash 2D determinístico
  */
 export function hash2d(x, y, seed) {
-    const val = Math.sin(x * 12.9898 + y * 78.233 + seed) * 43758.5453123;
+    // Transformamos a seed string em número caso necessário
+    const s = typeof seed === 'string' ? seed.length : seed;
+    const val = Math.sin(x * 12.9898 + y * 78.233 + s) * 43758.5453123;
     return val - Math.floor(val);
+}
+
+/**
+ * Ruído Suave (Smooth Noise)
+ * Analisa os vizinhos para criar transições naturais entre os detalhes do solo.
+ */
+export function smoothNoise(x, y, seed) {
+    const corners = (hash2d(x-1, y-1, seed) + hash2d(x+1, y-1, seed) + hash2d(x-1, y+1, seed) + hash2d(x+1, y+1, seed)) / 16;
+    const sides   = (hash2d(x-1, y, seed) + hash2d(x+1, y, seed) + hash2d(x, y-1, seed) + hash2d(x, y+1, seed)) /  8;
+    const center  =  hash2d(x, y, seed) / 4;
+    return corners + sides + center;
 }
 
 /**
