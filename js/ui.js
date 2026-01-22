@@ -1,6 +1,6 @@
 export default class UI {
     constructor() {
-        // Elementos de Tela
+        // Mapeamento de Elementos
         this.screens = {
             login: document.getElementById('screen-login'),
             host: document.getElementById('screen-host'),
@@ -8,7 +8,6 @@ export default class UI {
             game: document.getElementById('screen-game')
         };
 
-        // Inputs
         this.inputs = {
             nickname: document.getElementById('nickname'),
             hostId: document.getElementById('host-id'),
@@ -18,7 +17,6 @@ export default class UI {
             joinPassword: document.getElementById('join-password')
         };
 
-        // Botões
         this.buttons = {
             toHost: document.getElementById('btn-goto-host'),
             toJoin: document.getElementById('btn-goto-join'),
@@ -32,59 +30,49 @@ export default class UI {
         this.bindEvents();
     }
 
-    // Gerenciador de Transição de Telas
-    showScreen(screenName) {
-        Object.values(this.screens).forEach(screen => {
-            screen.classList.remove('active');
-            screen.classList.add('hidden');
+    showScreen(name) {
+        Object.values(this.screens).forEach(s => {
+            s.classList.remove('active');
+            s.classList.add('hidden');
         });
-
-        if (this.screens[screenName]) {
-            this.screens[screenName].classList.remove('hidden');
-            this.screens[screenName].classList.add('active');
-        } else {
-            console.error(`Tela ${screenName} não encontrada.`);
+        if (this.screens[name]) {
+            this.screens[name].classList.remove('hidden');
+            this.screens[name].classList.add('active');
         }
     }
 
     bindEvents() {
-        // Navegação Básica
+        // Navegação
         this.buttons.toHost.addEventListener('click', () => {
-            if (!this.validateNickname()) return;
-            this.showScreen('host');
+            if (this.validateNick()) this.showScreen('host');
         });
-
         this.buttons.toJoin.addEventListener('click', () => {
-            if (!this.validateNickname()) return;
-            this.showScreen('join');
+            if (this.validateNick()) this.showScreen('join');
         });
 
         this.buttons.backHost.addEventListener('click', () => this.showScreen('login'));
         this.buttons.backJoin.addEventListener('click', () => this.showScreen('login'));
 
-        // Gerar Seed Aleatória
+        // Utils
         this.buttons.randomSeed.addEventListener('click', () => {
-            const randomSeed = Math.floor(Math.random() * 999999).toString();
-            this.inputs.hostSeed.value = randomSeed;
+            this.inputs.hostSeed.value = Math.random().toString(36).substring(7);
         });
     }
 
-    validateNickname() {
-        const nick = this.inputs.nickname.value.trim();
-        if (nick.length < 3) {
-            alert("Por favor, escolha um nickname com pelo menos 3 caracteres.");
+    validateNick() {
+        if (this.inputs.nickname.value.trim().length < 3) {
+            alert("Nickname muito curto!");
             return false;
         }
         return true;
     }
 
-    // Getters para recuperar dados dos formulários
     getHostData() {
         return {
             nickname: this.inputs.nickname.value.trim(),
             sessionId: this.inputs.hostId.value.trim(),
-            password: this.inputs.hostPassword.value.trim(),
-            seed: this.inputs.hostSeed.value.trim() || Math.floor(Math.random() * 999999).toString()
+            password: this.inputs.hostPassword ? this.inputs.hostPassword.value : "",
+            seed: this.inputs.hostSeed.value.trim() || "padrao"
         };
     }
 
@@ -92,7 +80,7 @@ export default class UI {
         return {
             nickname: this.inputs.nickname.value.trim(),
             targetSessionId: this.inputs.joinId.value.trim(),
-            password: this.inputs.joinPassword.value.trim()
+            password: this.inputs.joinPassword ? this.inputs.joinPassword.value : ""
         };
     }
 }
