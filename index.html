@@ -13,7 +13,7 @@
         <section id="screen-login" class="screen active">
             <h1>The Hive Kingdom</h1>
             <div class="form-group">
-                <label>Nickname de Abelha</label>
+                <label>Seu Nickname</label>
                 <input type="text" id="nickname" placeholder="Ex: Zangão01" maxlength="15">
             </div>
             <div class="button-group">
@@ -23,7 +23,7 @@
         </section>
 
         <section id="screen-host" class="screen hidden">
-            <h2>Fundar Novo Reino</h2>
+            <h2>Fundar Reino</h2>
             <div class="form-group">
                 <label>ID da Sessão</label>
                 <input type="text" id="host-id" placeholder="Ex: colmeia-1">
@@ -31,20 +31,20 @@
                 <label>Senha (Opcional)</label>
                 <input type="password" id="host-password" placeholder="Senha secreta">
                 
-                <label>Seed do Mapa</label>
+                <label>Seed do Mundo</label>
                 <div class="input-row">
-                    <input type="text" id="host-seed" placeholder="Ex: natureza">
+                    <input type="text" id="host-seed" placeholder="Ex: floresta">
                     <button id="btn-random-seed" class="btn small">Aleatório</button>
                 </div>
             </div>
             <div class="button-group">
-                <button id="btn-start-host" class="btn primary">Criar Reino</button>
+                <button id="btn-start-host" class="btn primary">Criar e Jogar</button>
                 <button id="btn-back-host" class="btn danger">Voltar</button>
             </div>
         </section>
 
         <section id="screen-join" class="screen hidden">
-            <h2>Entrar na Colmeia</h2>
+            <h2>Entrar no Reino</h2>
             <div class="form-group">
                 <label>ID do Host</label>
                 <input type="text" id="join-id" placeholder="Ex: colmeia-1">
@@ -62,7 +62,7 @@
             <canvas id="game-canvas"></canvas>
             
             <div id="game-ui">
-                <div id="debug-info">Ping: <span id="ping-val">--</span>ms</div>
+                <div id="info-display">Ping: <span id="ping-val">--</span>ms</div>
                 
                 <div id="mobile-controls">
                     <div id="joystick-zone">
