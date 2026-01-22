@@ -6,91 +6,93 @@ class GameApp {
     constructor() {
         this.ui = new UI();
         this.network = new NetworkManager();
-        this.game = new Game(); // Instancia o Motor
+        this.game = new Game();
         
+        // Controle de taxa de envio (Network Throttle)
+        this.lastSentTime = 0;
+        this.sendRate = 50; // Envia updates a cada 50ms (20 vezes por segundo)
+
         this.initListeners();
     }
 
     initListeners() {
-        // --- EVENTOS DE UI ---
+        // --- CONFIGURAÇÃO DE REDE PARA JOGO ---
+        
+        // 1. Recebendo dados da rede
+        this.network.onDataReceived = (packet) => {
+            switch (packet.type) {
+                case 'WELCOME':
+                    // Guest recebe seed e inicia
+                    console.log("Conectado! Seed:", packet.data.seed);
+                    const myNick = this.ui.inputs.nickname.value || "Guest";
+                    this.startGame(packet.data.seed, this.network.myId, myNick);
+                    break;
+                
+                case 'PLAYER_MOVE':
+                    // Atualiza posição de outro player no meu jogo
+                    this.game.updateRemotePlayer(packet.id, packet.data);
+                    break;
 
-        // Botão: CRIAR REINO (Host)
+                case 'PLAYER_DISCONNECT':
+                    this.game.removePlayer(packet.id);
+                    break;
+            }
+        };
+
+        // 2. Enviando dados do jogo (Movimento Local)
+        this.game.onPlayerMove = (playerState) => {
+            const now = Date.now();
+            if (now - this.lastSentTime > this.sendRate) {
+                this.network.broadcast({
+                    type: 'PLAYER_MOVE',
+                    id: this.network.myId, // Quem sou eu
+                    data: playerState
+                });
+                this.lastSentTime = now;
+            }
+        };
+
+        // --- EVENTOS DE UI (Botões) ---
+
+        // Host
         this.ui.buttons.startHost.addEventListener('click', async () => {
             const hostData = this.ui.getHostData();
-            
-            if (!hostData.sessionId) {
-                alert("Por favor, defina um ID para a sessão.");
-                return;
-            }
+            if (!hostData.sessionId) return alert("ID necessário");
 
             try {
-                // 1. Inicializa Rede
-                await this.network.init(hostData.sessionId);
+                const id = await this.network.init(hostData.sessionId);
+                this.network.startHosting({ seed: hostData.seed });
+                alert(`Reino criado! ID: ${id}`);
                 
-                // 2. Configura Host
-                this.network.startHosting({
-                    seed: hostData.seed,
-                    password: hostData.password
-                });
-
-                alert(`Reino fundado! ID: ${hostData.sessionId}\nSeed: ${hostData.seed}`);
-                
-                // 3. Inicia o Jogo Localmente
-                await this.startGame(hostData.seed);
-
-            } catch (error) {
-                alert("Erro ao criar sessão. O ID pode já estar em uso.");
-                console.error(error);
+                // Inicia jogo
+                this.startGame(hostData.seed, id, hostData.nickname);
+            } catch (err) {
+                alert("Erro ao criar. ID em uso?");
+                console.error(err);
             }
         });
 
-        // Botão: CONECTAR (Guest)
+        // Guest
         this.ui.buttons.startJoin.addEventListener('click', async () => {
             const joinData = this.ui.getJoinData();
-
-            if (!joinData.targetSessionId) {
-                alert("Insira o ID do Reino.");
-                return;
-            }
+            if (!joinData.targetSessionId) return alert("ID do Host necessário");
 
             try {
-                // 1. Inicializa Rede (ID aleatório)
-                await this.network.init(null);
-                
-                // 2. Conecta ao Host
+                // Guest entra com ID automático
+                await this.network.init(null); 
                 this.network.connectToHost(joinData.targetSessionId);
-                
-                // O jogo iniciará quando o evento 'game-start' for recebido
-
-            } catch (error) {
-                console.error(error);
+                // O jogo inicia no evento 'WELCOME' do network.onDataReceived
+            } catch (err) {
+                console.error(err);
             }
-        });
-
-        // --- EVENTOS DE REDE/SISTEMA ---
-
-        // Disparado quando o Guest recebe o pacote de boas-vindas do Host
-        window.addEventListener('game-start', async (e) => {
-            const serverData = e.detail;
-            console.log("Recebido comando de início do Host. Seed:", serverData.seed);
-            await this.startGame(serverData.seed);
         });
     }
 
-    // Função centralizada para iniciar a engine
-    async startGame(seed) {
-        // Carrega imagens antes de mostrar a tela
+    async startGame(seed, myId, nickname) {
         await this.game.loadAssets();
-        
-        // Troca a tela UI -> Game Canvas
         this.ui.showScreen('game');
-        
-        // Inicia o loop do jogo
-        this.game.init(seed);
+        this.game.init(seed, myId, nickname);
     }
 }
 
-// Inicializa a aplicação
-window.onload = () => {
-    const app = new GameApp();
-};
+window.onload = () => new GameApp();
