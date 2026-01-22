@@ -11,15 +11,21 @@ export default class Game {
         this.camera = { x: 0, y: 0 };
         this.assets = {};
         
+        // Jogadores
         this.localPlayer = { x: 0, y: 0, speed: 300, facing: 'down', nickname: 'Eu' };
         this.remotePlayers = new Map();
         
+        // Estado do Mundo
         this.seed = null;
         this.rng = null;
         this.isRunning = false;
+        
+        // Callbacks
         this.onPlayerMove = null; 
 
+        // Configuração visual
         this.lastTime = 0;
+
         this.resize();
         window.addEventListener('resize', () => this.resize());
     }
@@ -30,7 +36,7 @@ export default class Game {
     }
 
     async loadAssets() {
-        const list = {
+        const imageList = {
             'bee_idle': 'assets/BeeIdle.png',
             'bee_up': 'assets/BeeUp.png',
             'bee_down': 'assets/BeeDown.png',
@@ -38,137 +44,224 @@ export default class Game {
             'bee_right': 'assets/BeeRight.png',
             'flower': 'assets/Flower.png'
         };
-        const promises = Object.keys(list).map(k => new Promise(resolve => {
-            const img = new Image();
-            img.src = list[k];
-            img.onload = () => { this.assets[k] = img; resolve(); };
-            img.onerror = () => resolve();
-        }));
+
+        const promises = Object.keys(imageList).map(key => {
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.src = imageList[key];
+                img.onload = () => { this.assets[key] = img; resolve(); };
+                img.onerror = () => { 
+                    // Se não tiver imagem, não trava, usamos fallback de cores
+                    resolve(); 
+                };
+            });
+        });
+
         await Promise.all(promises);
     }
 
-    init(seed, myId, nick) {
+    init(seed, myId, nickname) {
         this.seed = seed;
-        this.localPlayer.nickname = nick;
+        this.myId = myId;
+        this.localPlayer.nickname = nickname;
+        this.rng = createSeededRandom(this.seed);
+        
         this.isRunning = true;
         this.lastTime = performance.now();
-        requestAnimationFrame(t => this.loop(t));
+        requestAnimationFrame((t) => this.loop(t));
     }
 
-    updateRemotePlayer(id, data) { this.remotePlayers.set(id, data); }
-    removePlayer(id) { this.remotePlayers.delete(id); }
+    updateRemotePlayer(id, data) {
+        if (id === this.myId) return;
+        this.remotePlayers.set(id, data);
+    }
 
-    loop(t) {
+    removePlayer(id) {
+        this.remotePlayers.delete(id);
+    }
+
+    loop(timestamp) {
         if (!this.isRunning) return;
-        const dt = (t - this.lastTime) / 1000;
-        this.lastTime = t;
-        this.update(dt);
+
+        const deltaTime = (timestamp - this.lastTime) / 1000;
+        this.lastTime = timestamp;
+
+        this.update(deltaTime);
         this.draw();
-        requestAnimationFrame(time => this.loop(time));
+
+        requestAnimationFrame((t) => this.loop(t));
     }
 
-    update(dt) {
+    update(deltaTime) {
+        // Input e Movimento
         const input = this.input.getState();
+
         if (input.isMoving) {
-            this.localPlayer.x += input.x * this.localPlayer.speed * dt;
-            this.localPlayer.y += input.y * this.localPlayer.speed * dt;
+            this.localPlayer.x += input.x * this.localPlayer.speed * deltaTime;
+            this.localPlayer.y += input.y * this.localPlayer.speed * deltaTime;
             this.localPlayer.facing = input.facing;
-            if (this.onPlayerMove) this.onPlayerMove({
-                x: Math.round(this.localPlayer.x),
-                y: Math.round(this.localPlayer.y),
-                facing: this.localPlayer.facing,
-                nickname: this.localPlayer.nickname
-            });
+
+            // Envia dados para rede
+            if (this.onPlayerMove) {
+                this.onPlayerMove({
+                    x: Math.round(this.localPlayer.x),
+                    y: Math.round(this.localPlayer.y),
+                    facing: this.localPlayer.facing,
+                    nickname: this.localPlayer.nickname
+                });
+            }
         }
-        const tx = this.localPlayer.x - this.canvas.width / 2;
-        const ty = this.localPlayer.y - this.canvas.height / 2;
-        this.camera.x += (tx - this.camera.x) * 0.1;
-        this.camera.y += (ty - this.camera.y) * 0.1;
+
+        // Câmera Suave
+        const targetCamX = this.localPlayer.x - this.canvas.width / 2;
+        const targetCamY = this.localPlayer.y - this.canvas.height / 2;
+        this.camera.x += (targetCamX - this.camera.x) * 0.1;
+        this.camera.y += (targetCamY - this.camera.y) * 0.1;
     }
 
     draw() {
-        // Efeito de pulsação para as brasas (varia entre 0.4 e 1.0)
-        const emberPulse = 0.7 + Math.sin(Date.now() * 0.003) * 0.3;
-
+        // Limpa a tela com uma cor base escura (caso algo falhe no render)
         this.ctx.fillStyle = '#1a1a1a';
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
+        // --- RENDER DO MAPA ---
         const startCol = Math.floor(this.camera.x / this.tileSize);
         const endCol = startCol + (this.canvas.width / this.tileSize) + 1;
         const startRow = Math.floor(this.camera.y / this.tileSize);
         const endRow = startRow + (this.canvas.height / this.tileSize) + 1;
 
+        const offsetX = -this.camera.x + startCol * this.tileSize;
+        const offsetY = -this.camera.y + startRow * this.tileSize;
+
         for (let c = startCol; c <= endCol; c++) {
             for (let r = startRow; r <= endRow; r++) {
-                const x = c * this.tileSize - this.camera.x;
-                const y = r * this.tileSize - this.camera.y;
-                
-                const tile = this.getTileData(c, r);
+                // Posição na tela
+                const x = (c - startCol) * this.tileSize + offsetX;
+                const y = (r - startRow) * this.tileSize + offsetY;
 
-                // 1. CHÃO
-                this.ctx.fillStyle = tile.biome === 'safe' ? '#2ea44f' : '#222';
-                this.ctx.fillRect(x, y, this.tileSize, this.tileSize);
+                // Determina o Bioma e o Objeto
+                const tileData = this.getTileData(c, r);
 
-                // 2. DETALHES ORGÂNICOS DO CHÃO
-                this.ctx.globalAlpha = 0.3;
-                if (tile.biome === 'safe') {
-                    this.ctx.fillStyle = '#1e7a3a';
-                    // Simula fios de grama
-                    this.ctx.fillRect(x + tile.noiseA * 40, y + tile.noiseB * 40, 2, 6);
+                // 1. Desenha o Chão (Fundo)
+                if (tileData.biome === 'safe') {
+                    // Verde Grama
+                    this.ctx.fillStyle = '#2ea44f'; 
+                    this.ctx.fillRect(x, y, this.tileSize, this.tileSize);
+                    
+                    // Detalhe de grama (pequenos riscos)
+                    if (tileData.detailVar > 0.5) {
+                        this.ctx.fillStyle = '#3Tb95e';
+                        this.ctx.fillRect(x + 10, y + 10, 4, 4);
+                        this.ctx.fillRect(x + 40, y + 30, 4, 4);
+                    }
+
                 } else {
-                    this.ctx.fillStyle = '#000';
-                    // Simula manchas de cinza
-                    this.ctx.beginPath();
-                    this.ctx.arc(x + tile.noiseA * 50, y + tile.noiseB * 50, tile.noiseC * 5, 0, Math.PI * 2);
-                    this.ctx.fill();
+                    // Cinza Queimado
+                    this.ctx.fillStyle = '#2b2b2b'; 
+                    this.ctx.fillRect(x, y, this.tileSize, this.tileSize);
+                    
+                    // Detalhe de cinzas/fuligem
+                    this.ctx.fillStyle = '#1f1f1f';
+                    this.ctx.fillRect(x + (tileData.detailVar * 50), y + (tileData.detailVar * 20), 8, 8);
                 }
-                this.ctx.globalAlpha = 1.0;
 
-                // 3. OBJETOS (Flores ou Brasas)
-                if (tile.object === 'flower') {
-                    if (this.assets['flower']) this.ctx.drawImage(this.assets['flower'], x + 8, y + 8, 48, 48);
-                } else if (tile.object === 'ember') {
-                    // Render da brasa com pulsação
-                    const size = 2 + tile.noiseC * 4;
-                    this.ctx.shadowBlur = 15 * emberPulse;
-                    this.ctx.shadowColor = `rgba(255, 69, 0, ${emberPulse})`;
-                    this.ctx.fillStyle = `rgba(255, 140, 0, ${emberPulse})`;
-                    this.ctx.fillRect(x + tile.noiseA * 50, y + tile.noiseB * 50, size, size);
-                    this.ctx.shadowBlur = 0;
+                // 2. Desenha o Objeto (Flor, Brasa, Pedra)
+                if (tileData.object === 'flower') {
+                    if (this.assets['flower']) {
+                        this.ctx.drawImage(this.assets['flower'], x + 8, y + 8, 48, 48);
+                    } else {
+                        // Fallback Flor
+                        this.ctx.fillStyle = '#ff69b4';
+                        this.ctx.beginPath(); this.ctx.arc(x+32, y+32, 12, 0, Math.PI*2); this.ctx.fill();
+                    }
+                } 
+                else if (tileData.object === 'ember') {
+                    // Brasa brilhante
+                    this.ctx.fillStyle = '#ff4500'; // Laranja avermelhado
+                    this.ctx.shadowColor = '#ff4500';
+                    this.ctx.shadowBlur = 10;
+                    // Pequeno quadrado brilhante
+                    this.ctx.fillRect(x + 20, y + 40, 6, 6);
+                    this.ctx.shadowBlur = 0; // Reseta glow
+                }
+                else if (tileData.object === 'charcoal') {
+                    // Pedra de carvão
+                    this.ctx.fillStyle = '#000000';
+                    this.ctx.beginPath();
+                    this.ctx.arc(x+32, y+40, 8, 0, Math.PI*2);
+                    this.ctx.fill();
                 }
             }
         }
 
+        // --- RENDER DOS PLAYERS ---
         this.remotePlayers.forEach(p => this.drawPlayer(p, 'yellow'));
         this.drawPlayer(this.localPlayer, 'white');
     }
 
-    drawPlayer(p, color) {
-        const sx = p.x - this.camera.x;
-        const sy = p.y - this.camera.y;
-        const k = `bee_${p.facing}`;
-        const sprite = this.assets[k] || this.assets['bee_idle'];
-        if (sprite) this.ctx.drawImage(sprite, sx, sy, 64, 64);
-        else { this.ctx.fillStyle = color; this.ctx.fillRect(sx, sy, 64, 64); }
+    drawPlayer(player, color) {
+        const screenX = player.x - this.camera.x;
+        const screenY = player.y - this.camera.y;
+
+        // Sprite
+        let spriteKey = `bee_${player.facing}`;
+        const sprite = this.assets[spriteKey] || this.assets['bee_idle'];
+
+        if (sprite) {
+            this.ctx.drawImage(sprite, screenX, screenY, 64, 64);
+        } else {
+            this.ctx.fillStyle = color;
+            this.ctx.fillRect(screenX, screenY, 64, 64);
+        }
+
+        // Nickname
         this.ctx.fillStyle = 'white';
-        this.ctx.font = 'bold 14px Arial';
+        this.ctx.font = 'bold 14px Segoe UI';
         this.ctx.textAlign = 'center';
-        this.ctx.fillText(p.nickname || '?', sx + 32, sy - 10);
+        this.ctx.shadowColor = 'black';
+        this.ctx.shadowBlur = 4;
+        this.ctx.fillText(player.nickname || '?', screenX + 32, screenY - 10);
+        this.ctx.shadowBlur = 0;
     }
 
-    getTileData(c, r) {
-        const rng = createSeededRandom(`${this.seed}_${c}_${r}`);
-        const nA = rng(), nB = rng(), nC = rng();
+    // --- LÓGICA DE GERAÇÃO PROCEDURAL ---
+    
+    getTileData(col, row) {
+        // Gera seed única para este tile
+        const localSeed = `${this.seed}_${col}_${row}`;
+        const rng = createSeededRandom(localSeed);
+        const val1 = rng(); // Para bioma/ruído
+        const val2 = rng(); // Para objetos
+
+        // 1. Definição do Bioma (Safe vs Burned)
+        // Distância do centro (0,0) em coordenadas de Grid
+        const dist = Math.sqrt(col*col + row*row);
         
-        // Borda orgânica: Distância + ruído
-        const dist = Math.sqrt(c * c + r * r);
-        const borderNoise = (nA - 0.5) * 2.5; // Variação na borda
-        const biome = (dist + borderNoise < 4) ? 'safe' : 'burned';
+        // Raio base de ~3.5 tiles (aprox 7 de diametro = area 6x6 com borda)
+        // Adicionamos 'val1' como ruído (-1 a +1 virtualmente) para deixar a borda irregular
+        const noise = (val1 * 2); 
+        const maxRadius = 3.5 + noise; 
 
+        let biome = 'burned';
+        if (dist < maxRadius) {
+            biome = 'safe';
+        }
+
+        // 2. Definição do Objeto baseada no Bioma
         let object = null;
-        if (biome === 'safe' && nC > 0.92) object = 'flower';
-        else if (biome === 'burned' && nC > 0.98) object = 'ember'; // Menos brasas (2% de chance)
+        const detailVar = val1; // Usado para desenhar variações no chão
 
-        return { biome, object, noiseA: nA, noiseB: nB, noiseC: nC };
+        if (biome === 'safe') {
+            // No bioma seguro, nascem flores (15% chance)
+            if (val2 > 0.85) object = 'flower';
+        } else {
+            // No bioma queimado
+            // 5% chance de brasa
+            if (val2 > 0.95) object = 'ember';
+            // 10% chance de carvão
+            else if (val2 > 0.85) object = 'charcoal';
+        }
+
+        return { biome, object, detailVar };
     }
 }

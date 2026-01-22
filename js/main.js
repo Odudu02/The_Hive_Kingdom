@@ -7,44 +7,71 @@ class GameApp {
         this.ui = new UI();
         this.network = new NetworkManager();
         this.game = new Game();
+        
         this.lastSent = 0;
-        this.sendRate = 50; 
+        this.sendRate = 50; // Atualiza a rede a cada 50ms
+
         this.init();
     }
 
     init() {
+        // --- 1. Eventos de Rede ---
         this.network.onDataReceived = (pkg) => {
-            if (pkg.type === 'WELCOME') {
-                const nick = this.ui.inputs.nickname.value || "Bee";
-                this.startGame(pkg.data.seed, this.network.myId, nick);
-            } else if (pkg.type === 'PLAYER_MOVE') {
-                this.game.updateRemotePlayer(pkg.id, pkg.data);
-            } else if (pkg.type === 'PLAYER_DISCONNECT') {
-                this.game.removePlayer(pkg.id);
+            switch(pkg.type) {
+                case 'WELCOME':
+                    console.log("[MAIN] Conectado. Seed:", pkg.data.seed);
+                    const nick = this.ui.inputs.nickname.value || "Guest";
+                    this.startGame(pkg.data.seed, this.network.myId, nick);
+                    break;
+                case 'PLAYER_MOVE':
+                    this.game.updateRemotePlayer(pkg.id, pkg.data);
+                    break;
+                case 'PLAYER_DISCONNECT':
+                    this.game.removePlayer(pkg.id);
+                    break;
             }
         };
 
+        // --- 2. Eventos do Jogo ---
         this.game.onPlayerMove = (data) => {
             const now = Date.now();
             if (now - this.lastSent > this.sendRate) {
-                this.network.broadcast({ type: 'PLAYER_MOVE', id: this.network.myId, data });
+                this.network.broadcast({
+                    type: 'PLAYER_MOVE',
+                    id: this.network.myId,
+                    data: data
+                });
                 this.lastSent = now;
             }
         };
 
+        // --- 3. Eventos de UI ---
         this.ui.buttons.startHost.addEventListener('click', async () => {
             const data = this.ui.getHostData();
-            if (!data.sessionId) return alert("ID Requerido");
-            const id = await this.network.init(data.sessionId);
-            this.network.startHosting({ seed: data.seed });
-            this.startGame(data.seed, id, data.nickname);
+            if (!data.sessionId) return alert("Defina o ID da sessão");
+            
+            try {
+                const id = await this.network.init(data.sessionId);
+                this.network.startHosting({ seed: data.seed });
+                alert(`Reino Criado!\nID: ${id}`);
+                this.startGame(data.seed, id, data.nickname);
+            } catch (e) {
+                alert("Erro: ID em uso ou falha de conexão.");
+                console.error(e);
+            }
         });
 
         this.ui.buttons.startJoin.addEventListener('click', async () => {
             const data = this.ui.getJoinData();
-            if (!data.targetSessionId) return alert("ID do Host Requerido");
-            await this.network.init(null);
-            this.network.connectToHost(data.targetSessionId);
+            if (!data.targetSessionId) return alert("Informe o ID do Host");
+
+            try {
+                await this.network.init(null);
+                this.network.connectToHost(data.targetSessionId);
+            } catch (e) {
+                console.error(e);
+                alert("Erro ao conectar.");
+            }
         });
     }
 
