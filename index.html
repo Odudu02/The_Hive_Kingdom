@@ -13,37 +13,47 @@
         <section id="screen-login" class="screen active">
             <h1>The Hive Kingdom</h1>
             <div class="form-group">
-                <label>Nickname</label>
-                <input type="text" id="nickname" placeholder="Sua Abelha" maxlength="10">
+                <label>Nickname de Abelha</label>
+                <input type="text" id="nickname" placeholder="Ex: Zangão01" maxlength="15">
             </div>
             <div class="button-group">
-                <button id="btn-goto-host" class="btn primary">Fundar Reino</button>
-                <button id="btn-goto-join" class="btn secondary">Entrar no Reino</button>
+                <button id="btn-goto-host" class="btn primary">Fundar Reino (Host)</button>
+                <button id="btn-goto-join" class="btn secondary">Entrar em um Reino</button>
             </div>
         </section>
 
         <section id="screen-host" class="screen hidden">
-            <h2>Criar Mundo</h2>
+            <h2>Fundar Novo Reino</h2>
             <div class="form-group">
-                <input type="text" id="host-id" placeholder="ID da Sessão">
+                <label>ID da Sessão</label>
+                <input type="text" id="host-id" placeholder="Ex: colmeia-1">
+                
+                <label>Senha (Opcional)</label>
+                <input type="password" id="host-password" placeholder="Senha secreta">
+                
+                <label>Seed do Mapa</label>
                 <div class="input-row">
-                    <input type="text" id="host-seed" placeholder="Seed">
-                    <button id="btn-random-seed" class="btn small">Dice</button>
+                    <input type="text" id="host-seed" placeholder="Ex: natureza">
+                    <button id="btn-random-seed" class="btn small">Aleatório</button>
                 </div>
             </div>
             <div class="button-group">
-                <button id="btn-start-host" class="btn primary">Iniciar</button>
+                <button id="btn-start-host" class="btn primary">Criar Reino</button>
                 <button id="btn-back-host" class="btn danger">Voltar</button>
             </div>
         </section>
 
         <section id="screen-join" class="screen hidden">
-            <h2>Conectar</h2>
+            <h2>Entrar na Colmeia</h2>
             <div class="form-group">
-                <input type="text" id="join-id" placeholder="ID do Host">
+                <label>ID do Host</label>
+                <input type="text" id="join-id" placeholder="Ex: colmeia-1">
+                
+                <label>Senha</label>
+                <input type="password" id="join-password" placeholder="Senha da sala">
             </div>
             <div class="button-group">
-                <button id="btn-start-join" class="btn primary">Entrar</button>
+                <button id="btn-start-join" class="btn primary">Conectar</button>
                 <button id="btn-back-join" class="btn danger">Voltar</button>
             </div>
         </section>
@@ -52,13 +62,13 @@
             <canvas id="game-canvas"></canvas>
             
             <div id="game-ui">
-                <div id="ping-display">Ping: <span id="ping-val">0</span>ms</div>
+                <div id="debug-info">Ping: <span id="ping-val">--</span>ms</div>
                 
                 <div id="mobile-controls">
                     <div id="joystick-zone">
                         <div id="joystick-knob"></div>
                     </div>
-                    <div id="action-button">Action</div>
+                    <div id="action-button">AÇÃO</div>
                 </div>
             </div>
         </section>
