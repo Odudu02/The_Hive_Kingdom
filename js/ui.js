@@ -1,6 +1,5 @@
 export default class UI {
     constructor() {
-        // Mapeamento de Elementos
         this.screens = {
             login: document.getElementById('screen-login'),
             host: document.getElementById('screen-host'),
@@ -42,7 +41,6 @@ export default class UI {
     }
 
     bindEvents() {
-        // Navegação
         this.buttons.toHost.addEventListener('click', () => {
             if (this.validateNick()) this.showScreen('host');
         });
@@ -53,7 +51,6 @@ export default class UI {
         this.buttons.backHost.addEventListener('click', () => this.showScreen('login'));
         this.buttons.backJoin.addEventListener('click', () => this.showScreen('login'));
 
-        // Utils
         this.buttons.randomSeed.addEventListener('click', () => {
             this.inputs.hostSeed.value = Math.random().toString(36).substring(7);
         });
@@ -61,7 +58,7 @@ export default class UI {
 
     validateNick() {
         if (this.inputs.nickname.value.trim().length < 3) {
-            alert("Nickname muito curto!");
+            alert("Nickname deve ter pelo menos 3 letras.");
             return false;
         }
         return true;
@@ -71,8 +68,9 @@ export default class UI {
         return {
             nickname: this.inputs.nickname.value.trim(),
             sessionId: this.inputs.hostId.value.trim(),
+            // Proteção contra campo nulo
             password: this.inputs.hostPassword ? this.inputs.hostPassword.value : "",
-            seed: this.inputs.hostSeed.value.trim() || "padrao"
+            seed: this.inputs.hostSeed.value.trim() || "mundo1"
         };
     }
 
