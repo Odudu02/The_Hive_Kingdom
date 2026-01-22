@@ -6,93 +6,127 @@ class GameApp {
     constructor() {
         this.ui = new UI();
         this.network = new NetworkManager();
-        this.game = new Game();
+        this.game = new Game(); // O Game já instancia o InputHandler internamente
         
         // Controle de taxa de envio (Network Throttle)
         this.lastSentTime = 0;
-        this.sendRate = 50; // Envia updates a cada 50ms (20 vezes por segundo)
+        this.sendRate = 50; // ms (aprox 20 updates/segundo)
 
         this.initListeners();
     }
 
     initListeners() {
-        // --- CONFIGURAÇÃO DE REDE PARA JOGO ---
-        
-        // 1. Recebendo dados da rede
+        // ============================================================
+        // 1. EVENTOS DE REDE (O que fazer quando chegar dados)
+        // ============================================================
         this.network.onDataReceived = (packet) => {
             switch (packet.type) {
                 case 'WELCOME':
-                    // Guest recebe seed e inicia
-                    console.log("Conectado! Seed:", packet.data.seed);
+                    // Guest recebe este pacote ao entrar na sala
+                    console.log("[MAIN] Conectado ao Host. Seed recebida:", packet.data.seed);
                     const myNick = this.ui.inputs.nickname.value || "Guest";
+                    // Inicia o jogo
                     this.startGame(packet.data.seed, this.network.myId, myNick);
                     break;
                 
                 case 'PLAYER_MOVE':
-                    // Atualiza posição de outro player no meu jogo
+                    // Atualiza a posição de outro jogador na tela
                     this.game.updateRemotePlayer(packet.id, packet.data);
                     break;
 
                 case 'PLAYER_DISCONNECT':
+                    // Remove jogador que saiu
                     this.game.removePlayer(packet.id);
                     break;
             }
         };
 
-        // 2. Enviando dados do jogo (Movimento Local)
+        // ============================================================
+        // 2. EVENTOS DO JOGO (O que fazer quando EU me movo)
+        // ============================================================
         this.game.onPlayerMove = (playerState) => {
             const now = Date.now();
+            // Só envia se passou o tempo do throttle
             if (now - this.lastSentTime > this.sendRate) {
                 this.network.broadcast({
                     type: 'PLAYER_MOVE',
-                    id: this.network.myId, // Quem sou eu
+                    id: this.network.myId,
                     data: playerState
                 });
                 this.lastSentTime = now;
             }
         };
 
-        // --- EVENTOS DE UI (Botões) ---
-
-        // Host
+        // ============================================================
+        // 3. EVENTOS DE UI (Botões Iniciais)
+        // ============================================================
+        
+        // --- HOST (CRIAR) ---
         this.ui.buttons.startHost.addEventListener('click', async () => {
             const hostData = this.ui.getHostData();
-            if (!hostData.sessionId) return alert("ID necessário");
+            
+            if (!hostData.sessionId) {
+                alert("Por favor, digite um ID para a sessão.");
+                return;
+            }
 
             try {
+                // Inicia PeerJS com ID fixo
                 const id = await this.network.init(hostData.sessionId);
-                this.network.startHosting({ seed: hostData.seed });
-                alert(`Reino criado! ID: ${id}`);
                 
-                // Inicia jogo
+                // Configura lógica de Host
+                this.network.startHosting({ seed: hostData.seed });
+                
+                alert(`Reino fundado com sucesso!\nID: ${id}\nSeed: ${hostData.seed}`);
+                
+                // Inicia o jogo localmente
                 this.startGame(hostData.seed, id, hostData.nickname);
+
             } catch (err) {
-                alert("Erro ao criar. ID em uso?");
+                alert("Erro ao criar sessão. O ID pode já estar em uso.");
                 console.error(err);
             }
         });
 
-        // Guest
+        // --- JOIN (ENTRAR) ---
         this.ui.buttons.startJoin.addEventListener('click', async () => {
             const joinData = this.ui.getJoinData();
-            if (!joinData.targetSessionId) return alert("ID do Host necessário");
+
+            if (!joinData.targetSessionId) {
+                alert("Por favor, digite o ID do Host.");
+                return;
+            }
 
             try {
-                // Guest entra com ID automático
+                // Inicia PeerJS com ID aleatório
                 await this.network.init(null); 
+                
+                // Tenta conectar ao Host
                 this.network.connectToHost(joinData.targetSessionId);
-                // O jogo inicia no evento 'WELCOME' do network.onDataReceived
+                
+                console.log("[MAIN] Aguardando pacote WELCOME...");
+                // O jogo NÃO inicia aqui. Ele inicia no 'case WELCOME' lá em cima.
+
             } catch (err) {
                 console.error(err);
+                alert("Erro ao conectar ao servidor P2P.");
             }
         });
     }
 
     async startGame(seed, myId, nickname) {
+        // 1. Carrega imagens
         await this.game.loadAssets();
+        
+        // 2. Troca Tela
         this.ui.showScreen('game');
+        
+        // 3. Inicia Engine
         this.game.init(seed, myId, nickname);
     }
 }
 
-window.onload = () => new GameApp();
+// Inicializa quando a página carregar
+window.onload = () => {
+    new GameApp();
+};
